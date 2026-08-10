@@ -1,0 +1,8 @@
+{
+  "name": "Tra cứu Quy trình liên kết",
+  "description": "Ứng dụng tra cứu Quy trình chuẩn hóa của trường học theo mảng, bộ phận phụ trách, tìm kiếm và xem chi tiết tài liệu.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
