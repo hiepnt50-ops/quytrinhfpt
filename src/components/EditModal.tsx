@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, Plus, Trash2, Link2 } from 'lucide-react';
-import { QuyTrinhItem, TaiLieu } from '../types';
+import { X, Save, Link2, Loader2 } from 'lucide-react';
+import { QuyTrinhItem } from '../types';
 
 interface EditModalProps {
   item: QuyTrinhItem | null; // null means Add New
   isOpen: boolean;
   onClose: () => void;
-  onSave: (savedItem: QuyTrinhItem) => void;
+  onSave: (savedItem: QuyTrinhItem) => Promise<void> | void;
   availableCategories: string[];
+  isSubmitting?: boolean;
 }
 
 export const EditModal: React.FC<EditModalProps> = ({
@@ -16,6 +17,7 @@ export const EditModal: React.FC<EditModalProps> = ({
   onClose,
   onSave,
   availableCategories,
+  isSubmitting = false,
 }) => {
   const [formData, setFormData] = useState<Partial<QuyTrinhItem>>({
     mang: 'TC&QLĐT',
@@ -27,15 +29,17 @@ export const EditModal: React.FC<EditModalProps> = ({
     tomTat: '',
     loaiDeXuat: 'Cải tiến',
     linhVucDeXuat: '',
-    taiLieu: [],
   });
 
-  const [docList, setDocList] = useState<TaiLieu[]>([]);
+  const [docLink, setDocLink] = useState<string>('');
+  const [docName, setDocName] = useState<string>('');
 
   useEffect(() => {
     if (item) {
       setFormData(item);
-      setDocList(item.taiLieu || []);
+      const firstDoc = item.taiLieu && item.taiLieu.length > 0 ? item.taiLieu[0] : null;
+      setDocLink(firstDoc?.link || '');
+      setDocName(firstDoc?.ten || '');
     } else {
       setFormData({
         mang: availableCategories[0] || 'TC&QLĐT',
@@ -47,53 +51,37 @@ export const EditModal: React.FC<EditModalProps> = ({
         tomTat: '',
         loaiDeXuat: 'Cải tiến',
         linhVucDeXuat: '',
-        taiLieu: [],
       });
-      setDocList([]);
+      setDocLink('');
+      setDocName('');
     }
   }, [item, isOpen, availableCategories]);
 
   if (!isOpen) return null;
 
-  const handleAddDoc = () => {
-    setDocList([...docList, { ten: '', link: '', embedLink: '' }]);
-  };
-
-  const handleDocChange = (index: number, field: keyof TaiLieu, value: string) => {
-    const updated = [...docList];
-    updated[index][field] = value;
-    // Auto populate embedLink if Google Docs edit link provided
-    if (field === 'link' && value.includes('docs.google.com') && !updated[index].embedLink) {
-      updated[index].embedLink = value.replace(/\/edit.*$/, '/preview');
-    }
-    setDocList(updated);
-  };
-
-  const handleRemoveDoc = (index: number) => {
-    setDocList(docList.filter((_, i) => i !== index));
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.quyTrinh?.trim()) return;
 
+    const finalDocName = docName.trim() || formData.sanPham?.trim() || formData.quyTrinh?.trim() || 'Tài liệu hướng dẫn';
+    const finalDocLink = docLink.trim();
+
     const newItem: QuyTrinhItem = {
-      tt: item?.tt || Date.now().toString(),
-      mang: formData.mang || 'TC&QLĐT',
-      phuTrach: formData.phuTrach || formData.mang || 'Chưa phân công',
-      quyTrinh: formData.quyTrinh || '',
+      tt: item?.tt || '',
+      mang: formData.mang?.trim() || 'TC&QLĐT',
+      phuTrach: formData.phuTrach?.trim() || formData.mang?.trim() || 'Chưa phân công',
+      quyTrinh: formData.quyTrinh?.trim() || '',
       trangThai: formData.trangThai || 'Chưa xác định',
-      sanPham: formData.sanPham || '',
-      boPhan: formData.boPhan || '',
-      noiDung: formData.noiDung || '',
-      tomTat: formData.tomTat || formData.quyTrinh || '',
-      loaiDeXuat: formData.loaiDeXuat || '',
-      linhVucDeXuat: formData.linhVucDeXuat || '',
-      taiLieu: docList.filter((d) => d.ten || d.link),
+      sanPham: formData.sanPham?.trim() || '',
+      boPhan: formData.boPhan?.trim() || '',
+      noiDung: formData.noiDung?.trim() || '',
+      tomTat: formData.tomTat?.trim() || formData.quyTrinh?.trim() || '',
+      loaiDeXuat: formData.loaiDeXuat || 'Cải tiến',
+      linhVucDeXuat: formData.linhVucDeXuat?.trim() || '',
+      taiLieu: finalDocLink ? [{ ten: finalDocName, link: finalDocLink }] : [],
     };
 
-    onSave(newItem);
-    onClose();
+    await onSave(newItem);
   };
 
   return (
@@ -107,7 +95,8 @@ export const EditModal: React.FC<EditModalProps> = ({
           </h3>
           <button
             onClick={onClose}
-            className="p-1 text-white/80 hover:text-white rounded transition-colors cursor-pointer"
+            disabled={isSubmitting}
+            className="p-1 text-white/80 hover:text-white rounded transition-colors cursor-pointer disabled:opacity-50"
           >
             <X className="w-5 h-5" />
           </button>
@@ -124,7 +113,7 @@ export const EditModal: React.FC<EditModalProps> = ({
                 type="text"
                 list="category-suggestions"
                 required
-                value={formData.mang}
+                value={formData.mang || ''}
                 onChange={(e) => setFormData({ ...formData, mang: e.target.value })}
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#1e3a8a] focus:outline-none"
                 placeholder="VD: TC&QLĐT, TCM, CTHS..."
@@ -141,7 +130,7 @@ export const EditModal: React.FC<EditModalProps> = ({
               <input
                 type="text"
                 required
-                value={formData.phuTrach}
+                value={formData.phuTrach || ''}
                 onChange={(e) => setFormData({ ...formData, phuTrach: e.target.value })}
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#1e3a8a] focus:outline-none"
                 placeholder="VD: TC&QLĐT, Tự nhiên, VP..."
@@ -155,7 +144,7 @@ export const EditModal: React.FC<EditModalProps> = ({
             <input
               type="text"
               required
-              value={formData.quyTrinh}
+              value={formData.quyTrinh || ''}
               onChange={(e) => setFormData({ ...formData, quyTrinh: e.target.value, tomTat: e.target.value })}
               className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#1e3a8a] focus:outline-none font-semibold text-slate-900"
               placeholder="Nhập tên quy trình..."
@@ -168,7 +157,7 @@ export const EditModal: React.FC<EditModalProps> = ({
               <label className="block font-bold text-slate-700 mb-1">Sản phẩm đầu ra</label>
               <input
                 type="text"
-                value={formData.sanPham}
+                value={formData.sanPham || ''}
                 onChange={(e) => setFormData({ ...formData, sanPham: e.target.value })}
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#1e3a8a] focus:outline-none"
                 placeholder="Bỏ trống nếu chưa có sản phẩm"
@@ -179,7 +168,7 @@ export const EditModal: React.FC<EditModalProps> = ({
               <label className="block font-bold text-slate-700 mb-1">Bộ phận thực hiện</label>
               <input
                 type="text"
-                value={formData.boPhan}
+                value={formData.boPhan || ''}
                 onChange={(e) => setFormData({ ...formData, boPhan: e.target.value })}
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#1e3a8a] focus:outline-none"
                 placeholder="VD: Tổ chức và Quản lý Đào tạo..."
@@ -192,7 +181,7 @@ export const EditModal: React.FC<EditModalProps> = ({
             <div>
               <label className="block font-bold text-slate-700 mb-1">Loại đề xuất</label>
               <select
-                value={formData.loaiDeXuat}
+                value={formData.loaiDeXuat || 'Cải tiến'}
                 onChange={(e) => setFormData({ ...formData, loaiDeXuat: e.target.value })}
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#1e3a8a] focus:outline-none bg-white"
               >
@@ -207,7 +196,7 @@ export const EditModal: React.FC<EditModalProps> = ({
               <label className="block font-bold text-slate-700 mb-1">Lĩnh vực đề xuất</label>
               <input
                 type="text"
-                value={formData.linhVucDeXuat}
+                value={formData.linhVucDeXuat || ''}
                 onChange={(e) => setFormData({ ...formData, linhVucDeXuat: e.target.value })}
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#1e3a8a] focus:outline-none"
                 placeholder="Lĩnh vực chuyên môn..."
@@ -219,56 +208,47 @@ export const EditModal: React.FC<EditModalProps> = ({
           <div>
             <label className="block font-bold text-slate-700 mb-1">Nội dung chi tiết quy trình</label>
             <textarea
-              rows={5}
-              value={formData.noiDung}
+              rows={4}
+              value={formData.noiDung || ''}
               onChange={(e) => setFormData({ ...formData, noiDung: e.target.value })}
               className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#1e3a8a] focus:outline-none font-mono text-xs"
               placeholder="Nhập nội dung các bước, dùng gạch đầu dòng (-) để tự động định dạng danh sách..."
             />
           </div>
 
-          {/* Tài liệu đính kèm */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="font-bold text-slate-700">Tài liệu đính kèm (Google Docs)</label>
-              <button
-                type="button"
-                onClick={handleAddDoc}
-                className="inline-flex items-center gap-1 text-[#1e3a8a] font-semibold hover:underline text-xs cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Thêm tài liệu</span>
-              </button>
+          {/* Link tài liệu Google Docs */}
+          <div className="p-3.5 bg-amber-50/70 border border-amber-200 rounded-xl space-y-2.5">
+            <div className="flex items-center gap-1.5 font-bold text-amber-900 text-xs">
+              <Link2 className="w-4 h-4 text-amber-700 shrink-0" />
+              <span>Link tài liệu Google Docs / Drive</span>
             </div>
 
-            {docList.map((doc, idx) => (
-              <div key={idx} className="p-3 bg-slate-50 border border-slate-200 rounded-lg mb-2 space-y-2">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-semibold text-slate-700">Tài liệu #{idx + 1}</span>
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveDoc(idx)}
-                    className="text-red-500 hover:text-red-700 p-1 cursor-pointer"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div>
+                <label className="block text-[11px] font-semibold text-amber-800 mb-0.5">Tên tài liệu</label>
                 <input
                   type="text"
-                  placeholder="Tên tài liệu..."
-                  value={doc.ten}
-                  onChange={(e) => handleDocChange(idx, 'ten', e.target.value)}
-                  className="w-full px-2.5 py-1.5 border border-slate-300 rounded-md bg-white"
-                />
-                <input
-                  type="text"
-                  placeholder="Link Google Docs (https://docs.google.com/...)"
-                  value={doc.link}
-                  onChange={(e) => handleDocChange(idx, 'link', e.target.value)}
-                  className="w-full px-2.5 py-1.5 border border-slate-300 rounded-md bg-white"
+                  placeholder="VD: Quy trình Đào tạo 2025..."
+                  value={docName}
+                  onChange={(e) => setDocName(e.target.value)}
+                  className="w-full px-2.5 py-1.5 border border-amber-300 rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
                 />
               </div>
-            ))}
+
+              <div>
+                <label className="block text-[11px] font-semibold text-amber-800 mb-0.5">Link Google Docs/Drive</label>
+                <input
+                  type="text"
+                  placeholder="https://docs.google.com/document/d/..."
+                  value={docLink}
+                  onChange={(e) => setDocLink(e.target.value)}
+                  className="w-full px-2.5 py-1.5 border border-amber-300 rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
+                />
+              </div>
+            </div>
+            <p className="text-[10px] text-amber-700 italic">
+              Note: Backend lưu 1 link tài liệu duy nhất cho mỗi quy trình.
+            </p>
           </div>
 
           {/* Footer Submit */}
@@ -276,16 +256,27 @@ export const EditModal: React.FC<EditModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-100 font-semibold cursor-pointer"
+              disabled={isSubmitting}
+              className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-100 font-semibold cursor-pointer disabled:opacity-50"
             >
               Hủy
             </button>
             <button
               type="submit"
-              className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#1e3a8a] hover:bg-blue-900 text-white font-semibold rounded-lg shadow-xs cursor-pointer"
+              disabled={isSubmitting}
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#1e3a8a] hover:bg-blue-900 text-white font-semibold rounded-lg shadow-xs cursor-pointer disabled:opacity-50"
             >
-              <Save className="w-4 h-4" />
-              <span>{item ? 'Lưu thay đổi' : 'Tạo mới'}</span>
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Đang lưu...</span>
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4" />
+                  <span>{item ? 'Lưu thay đổi' : 'Tạo mới'}</span>
+                </>
+              )}
             </button>
           </div>
 
@@ -295,3 +286,4 @@ export const EditModal: React.FC<EditModalProps> = ({
     </div>
   );
 };
+

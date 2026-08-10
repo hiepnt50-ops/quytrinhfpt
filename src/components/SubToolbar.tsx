@@ -1,5 +1,5 @@
 import React from 'react';
-import { Plus, ChevronRight, Search, RotateCcw } from 'lucide-react';
+import { Plus, ChevronRight, Search, RotateCcw, Loader2 } from 'lucide-react';
 import { QuyTrinhItem } from '../types';
 
 interface SubToolbarProps {
@@ -10,6 +10,7 @@ interface SubToolbarProps {
   searchTerm: string;
   setSearchTerm: (term: string) => void;
   onResetData: () => void;
+  isLoading?: boolean;
 }
 
 export const SubToolbar: React.FC<SubToolbarProps> = ({
@@ -20,6 +21,7 @@ export const SubToolbar: React.FC<SubToolbarProps> = ({
   searchTerm,
   setSearchTerm,
   onResetData,
+  isLoading = false,
 }) => {
   return (
     <div className="bg-white border-b border-gray-200 py-2.5 px-4 sm:px-6 lg:px-8 shadow-2xs">
@@ -82,7 +84,7 @@ export const SubToolbar: React.FC<SubToolbarProps> = ({
           </nav>
         </div>
 
-        {/* Right Side: Search Box + Reset Data */}
+        {/* Right Side: Search Box + Refresh Data */}
         <div className="flex items-center gap-2 shrink-0">
           <div className="relative w-full md:w-64">
             <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -105,13 +107,19 @@ export const SubToolbar: React.FC<SubToolbarProps> = ({
 
           <button
             onClick={onResetData}
-            title="Đặt lại dữ liệu gốc"
-            className="p-1.5 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-full border border-gray-200 transition-colors cursor-pointer shrink-0"
+            title="Làm mới dữ liệu từ Google Sheet"
+            className="p-1.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-full border border-gray-200 transition-colors cursor-pointer shrink-0 flex items-center gap-1 text-xs px-2.5 font-medium"
           >
-            <RotateCcw className="w-3.5 h-3.5" />
+            {isLoading ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-900" />
+            ) : (
+              <RotateCcw className="w-3.5 h-3.5" />
+            )}
+            <span className="hidden sm:inline">Làm mới</span>
           </button>
         </div>
       </div>
     </div>
   );
 };
+

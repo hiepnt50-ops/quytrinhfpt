@@ -9,11 +9,11 @@ import {
   Maximize2,
   Minimize2,
   Loader2,
-  ChevronDown,
   Info,
   ChevronRight,
-  Check,
   ExternalLink,
+  X,
+  Save,
 } from 'lucide-react';
 import { QuyTrinhItem, TaiLieu } from '../types';
 
@@ -23,6 +23,7 @@ interface ProcedureDetailViewProps {
   onDelete: (item: QuyTrinhItem, e: React.MouseEvent) => void;
   onOpenAddModal: () => void;
   onRefresh: () => void;
+  onSaveLink: (item: QuyTrinhItem, newTen: string, newLink: string) => Promise<boolean>;
 }
 
 export const ProcedureDetailView: React.FC<ProcedureDetailViewProps> = ({
@@ -31,49 +32,72 @@ export const ProcedureDetailView: React.FC<ProcedureDetailViewProps> = ({
   onDelete,
   onOpenAddModal,
   onRefresh,
+  onSaveLink,
 }) => {
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [selectedDocIndex, setSelectedDocIndex] = useState<number>(0);
-  const [isLinkDropdownOpen, setIsLinkDropdownOpen] = useState<boolean>(false);
+  const [isAttachModalOpen, setIsAttachModalOpen] = useState<boolean>(false);
   const [isExpanded, setIsExpanded] = useState<boolean>(false);
   const [showTextContent, setShowTextContent] = useState<boolean>(false);
+  const [isSavingLink, setIsSavingLink] = useState<boolean>(false);
 
   const docsList: TaiLieu[] = item.taiLieu || [];
-  const activeDoc: TaiLieu | undefined = docsList[selectedDocIndex] || docsList[0];
+  const activeDoc: TaiLieu | undefined = docsList[0];
 
+  const [linkInput, setLinkInput] = useState<string>('');
+  const [nameInput, setNameInput] = useState<string>('');
 
-  // Trigger loading state whenever item or active doc changes
+  useEffect(() => {
+    if (activeDoc) {
+      setLinkInput(activeDoc.link || '');
+      setNameInput(activeDoc.ten || item.sanPham || item.quyTrinh || '');
+    } else {
+      setLinkInput('');
+      setNameInput(item.sanPham || item.quyTrinh || '');
+    }
+  }, [item, activeDoc]);
+
+  // Trigger loading state whenever item changes
   useEffect(() => {
     setIsLoading(true);
     const timer = setTimeout(() => {
       setIsLoading(false);
-    }, 700);
+    }, 600);
     return () => clearTimeout(timer);
-  }, [item.tt, selectedDocIndex]);
+  }, [item.tt, item.taiLieu]);
 
   const handleRefreshClick = () => {
     setIsLoading(true);
     onRefresh();
     setTimeout(() => {
       setIsLoading(false);
-    }, 700);
+    }, 600);
   };
 
   // Construct valid embed URL for Google Docs / Drive
   const getEmbedUrl = (doc?: TaiLieu) => {
-
     if (!doc) return '';
     if (doc.embedLink && doc.embedLink.trim()) {
       return doc.embedLink;
     }
     if (doc.link && doc.link.trim()) {
-      // Convert standard edit/view link to preview/embed
       return doc.link.replace(/\/edit.*$/, '/preview').replace(/\/view.*$/, '/preview');
     }
     return '';
   };
 
   const embedUrl = getEmbedUrl(activeDoc);
+
+  const handleSaveAttachLinkSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingLink(true);
+    const success = await onSaveLink(item, nameInput, linkInput);
+    setIsSavingLink(false);
+    if (success) {
+      setIsAttachModalOpen(false);
+      setIsLoading(true);
+      setTimeout(() => setIsLoading(false), 500);
+    }
+  };
 
   return (
     <div className="py-6 px-4 sm:px-6 lg:px-8 max-w-[1600px] mx-auto animate-in fade-in duration-300">
@@ -160,53 +184,14 @@ export const ProcedureDetailView: React.FC<ProcedureDetailViewProps> = ({
                 <span>Làm mới</span>
               </button>
 
-              {/* 🔗 Gắn link (n) Dropdown */}
-              <div className="relative">
-                <button
-                  onClick={() => setIsLinkDropdownOpen(!isLinkDropdownOpen)}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 font-bold rounded-full text-xs transition-colors cursor-pointer shadow-2xs"
-                >
-                  <Link2 className="w-3.5 h-3.5 text-amber-800" />
-                  <span>Gắn link ({docsList.length})</span>
-                  <ChevronDown className="w-3 h-3 text-amber-800" />
-                </button>
-
-                {/* Dropdown Menu for Selecting Document Link */}
-                {isLinkDropdownOpen && (
-                  <div className="absolute right-0 mt-2 w-72 bg-white rounded-xl shadow-xl border border-gray-200 z-50 py-2 animate-in fade-in slide-in-from-top-2 duration-150">
-                    <div className="px-3 py-1.5 text-[11px] font-bold text-gray-400 uppercase tracking-wider border-b border-gray-100">
-                      Danh sách tài liệu ({docsList.length})
-                    </div>
-                    {docsList.length > 0 ? (
-                      docsList.map((doc, idx) => (
-                        <button
-                          key={idx}
-                          onClick={() => {
-                            setSelectedDocIndex(idx);
-                            setIsLinkDropdownOpen(false);
-                          }}
-                          className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between hover:bg-blue-50 transition-colors cursor-pointer ${
-                            selectedDocIndex === idx
-                              ? 'bg-blue-50 text-blue-900 font-bold'
-                              : 'text-gray-700'
-                          }`}
-                        >
-                          <span className="truncate pr-2">
-                            {doc.ten || `Tài liệu #${idx + 1}`}
-                          </span>
-                          {selectedDocIndex === idx && (
-                            <Check className="w-3.5 h-3.5 text-blue-900 shrink-0" />
-                          )}
-                        </button>
-                      ))
-                    ) : (
-                      <div className="px-3 py-3 text-xs text-gray-400 italic">
-                        Chưa có link tài liệu
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
+              {/* 🔗 Gắn link Modal Button */}
+              <button
+                onClick={() => setIsAttachModalOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 font-bold rounded-full text-xs transition-colors cursor-pointer shadow-2xs"
+              >
+                <Link2 className="w-3.5 h-3.5 text-amber-800" />
+                <span>Gắn link ({docsList.length > 0 ? 1 : 0})</span>
+              </button>
 
               {/* ⤢ Mở rộng */}
               <button
@@ -235,7 +220,7 @@ export const ProcedureDetailView: React.FC<ProcedureDetailViewProps> = ({
                 Tài liệu đang xem:
               </span>
               <span className="font-bold text-blue-900">
-                {activeDoc?.ten || 'Văn bản hướng dẫn chuẩn'}
+                {activeDoc?.ten || 'Chưa gắn link tài liệu'}
               </span>
               {activeDoc?.link && (
                 <a
@@ -316,20 +301,99 @@ export const ProcedureDetailView: React.FC<ProcedureDetailViewProps> = ({
                   Chưa có tài liệu đính kèm cho quy trình này
                 </h3>
                 <p className="text-xs text-gray-500">
-                  Bạn có thể cập nhật và gắn link Google Docs bằng nút thêm mới bên dưới.
+                  Bạn có thể cập nhật và gắn link Google Docs bằng nút bên dưới.
                 </p>
               </div>
               <button
-                onClick={() => onEdit(item)}
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full text-xs font-bold transition-colors cursor-pointer shadow-xs"
+                onClick={() => setIsAttachModalOpen(true)}
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-full text-xs font-bold transition-colors cursor-pointer shadow-xs"
               >
-                <Plus className="w-4 h-4" />
-                <span>+ Thêm mới tài liệu</span>
+                <Link2 className="w-4 h-4" />
+                <span>Gắn link tài liệu Google Docs</span>
               </button>
             </div>
           )}
         </div>
       </div>
+
+      {/* Modal Gắn Link Tài Liệu (Strictly 1 link & 1 name field) */}
+      {isAttachModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden">
+            <div className="px-5 py-3.5 bg-amber-600 text-white flex items-center justify-between">
+              <h3 className="text-sm font-bold flex items-center gap-2">
+                <Link2 className="w-4 h-4" />
+                <span>Gắn link tài liệu Google Docs</span>
+              </h3>
+              <button
+                onClick={() => setIsAttachModalOpen(false)}
+                disabled={isSavingLink}
+                className="text-white/80 hover:text-white p-1 rounded cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveAttachLinkSubmit} className="p-5 space-y-3.5 text-xs">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Tên tài liệu *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="VD: Quy trình Đào tạo 2025"
+                  value={nameInput}
+                  onChange={(e) => setNameInput(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500 outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Link Google Docs / Drive *</label>
+                <input
+                  type="url"
+                  required
+                  placeholder="https://docs.google.com/document/d/..."
+                  value={linkInput}
+                  onChange={(e) => setLinkInput(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500 outline-none"
+                />
+                <p className="text-[10px] text-slate-500 mt-1 italic">
+                  Link dạng .../edit hoặc .../view sẽ tự động chuyển thành .../preview để nhúng vào trang.
+                </p>
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsAttachModalOpen(false)}
+                  disabled={isSavingLink}
+                  className="px-3.5 py-1.5 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-100 font-semibold cursor-pointer"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingLink}
+                  className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-lg shadow-2xs cursor-pointer disabled:opacity-50"
+                >
+                  {isSavingLink ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Đang lưu...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-3.5 h-3.5" />
+                      <span>Lưu link</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+
