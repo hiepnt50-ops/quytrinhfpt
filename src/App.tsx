@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { initialQuyTrinhData } from './data/quyTrinhData';
 import { QuyTrinhItem, TaiLieu, GoogleUser } from './types';
 import { Header } from './components/Header';
 import { SubToolbar } from './components/SubToolbar';
@@ -12,6 +13,25 @@ import { Sparkles, AlertTriangle, X, Loader2 } from 'lucide-react';
 const API_URL = "https://script.google.com/macros/s/AKfycbxM-2KYQfJ9Fgg0uNaoqlIw5WbH_jIahs550_UxlU5f6oY0v1-3JWlc5GEYsPD7-08MvA/exec";
 const OAUTH_CLIENT_ID = "354828369573-lr07c15usiopi6jdoh6re6vfmc78a5ao.apps.googleusercontent.com";
 const LOCAL_STORAGE_USER_KEY = 'fpt_quy_trinh_user_v1';
+
+// Normalize category names to unify variations like "Khối Chủ nhiệm", "Khối chủ nhiệm ", etc.
+const normalizeCategory = (cat?: string): string => {
+  if (!cat) return 'Khác';
+  const cleaned = cat.trim().replace(/\s+/g, ' ');
+  const lower = cleaned.toLowerCase();
+  if (lower === 'khối chủ nhiệm' || lower === 'khoi chu nhiem' || lower === 'chủ nhiệm' || lower === 'kcn') {
+    return 'Khối chủ nhiệm';
+  }
+  if (lower === 'tc&qlđt' || lower === 'tc&qldt' || lower === 'tc & qlđt') {
+    return 'TC&QLĐT';
+  }
+  if (lower === 'tcm') return 'TCM';
+  if (lower === 'cths') return 'CTHS';
+  if (lower === 'dvhs') return 'DVHS';
+  if (lower === 'ts&tt' || lower === 'ts & tt') return 'TS&TT';
+  if (lower === 'vp') return 'VP';
+  return cleaned;
+};
 
 export default function App() {
   const [data, setData] = useState<QuyTrinhItem[]>([]);
@@ -105,9 +125,11 @@ export default function App() {
       }
       const json = await res.json();
       if (json && json.success && Array.isArray(json.data)) {
-        const formatted: QuyTrinhItem[] = json.data.map((item: any) => ({
+        const apiFormatted: QuyTrinhItem[] = json.data.map((item: any) => ({
           ...item,
           tt: String(item.tt ?? ''),
+          mang: normalizeCategory(item.mang),
+          phuTrach: item.phuTrach ? String(item.phuTrach).trim() : '',
           taiLieu: Array.isArray(item.taiLieu)
             ? item.taiLieu.map((doc: TaiLieu) => ({
                 ...doc,
@@ -117,21 +139,39 @@ export default function App() {
               }))
             : [],
         }));
-        setData(formatted);
+
+        // Keep all 17 items for "Khối chủ nhiệm" and full dataset intact by merging any missing items
+        const apiTtSet = new Set(apiFormatted.map((p) => p.tt));
+        const apiNameSet = new Set(apiFormatted.map((p) => p.quyTrinh?.trim().toLowerCase()));
+
+        const missingStaticItems = initialQuyTrinhData
+          .map((item) => ({ ...item, mang: normalizeCategory(item.mang) }))
+          .filter(
+            (item) =>
+              !apiTtSet.has(item.tt) &&
+              !apiNameSet.has(item.quyTrinh?.trim().toLowerCase())
+          );
+
+        const mergedData = [...apiFormatted, ...missingStaticItems];
+        setData(mergedData);
 
         // Keep active detail view in sync
         setSelectedProcedure((prev) => {
           if (!prev) return null;
-          return formatted.find((p) => p.tt === prev.tt) || prev;
+          return mergedData.find((p) => p.tt === prev.tt) || prev;
         });
       } else if (json && json.error) {
         showErrorMessage(json.error);
+        // Fallback to static initial dataset if backend error
+        setData(initialQuyTrinhData.map((item) => ({ ...item, mang: normalizeCategory(item.mang) })));
       } else {
         showErrorMessage('Dữ liệu trả về từ Google Sheet không đúng định dạng');
+        setData(initialQuyTrinhData.map((item) => ({ ...item, mang: normalizeCategory(item.mang) })));
       }
     } catch (err: any) {
       console.error('Fetch error:', err);
       showErrorMessage(`Không thể kết nối đến máy chủ Google Apps Script: ${err.message || 'Lỗi mạng'}`);
+      setData(initialQuyTrinhData.map((item) => ({ ...item, mang: normalizeCategory(item.mang) })));
     } finally {
       setIsLoading(false);
     }
@@ -146,7 +186,7 @@ export default function App() {
   const categoriesWithCounts = useMemo(() => {
     const countsMap: Record<string, number> = {};
     data.forEach((item) => {
-      const cat = item.mang?.trim() || 'Khác';
+      const cat = normalizeCategory(item.mang);
       countsMap[cat] = (countsMap[cat] || 0) + 1;
     });
 
@@ -180,7 +220,7 @@ export default function App() {
           p.mang?.toLowerCase().includes(term)
       );
     } else if (selectedCategory) {
-      result = result.filter((p) => p.mang === selectedCategory);
+      result = result.filter((p) => normalizeCategory(p.mang) === normalizeCategory(selectedCategory));
     }
 
     return result;
@@ -188,7 +228,7 @@ export default function App() {
 
   // Active category procedure count
   const activeCategoryCount = useMemo(() => {
-    return data.filter((p) => p.mang === selectedCategory).length;
+    return data.filter((p) => normalizeCategory(p.mang) === normalizeCategory(selectedCategory)).length;
   }, [data, selectedCategory]);
 
   // Handlers
